@@ -10,7 +10,7 @@ export default async function handler(req, res) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        return res.status(500).json({ error: '서버에 API 키가 설정되지 않았습니다.' });
+        return res.status(500).json({ error: '서버에 Gemini API 키가 설정되지 않았습니다.' });
     }
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -29,6 +29,7 @@ export default async function handler(req, res) {
     `;
 
     try {
+        // 1. Gemini AI에게 번역 요청
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -44,6 +45,14 @@ export default async function handler(req, res) {
         if (response.ok && data.candidates && data.candidates[0].content.parts[0].text) {
             let aiResult = data.candidates[0].content.parts[0].text;
             aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
+
+            // 2. [구글 시트 저장] 번역 성공 시 구글 시트에 데이터 전송
+            try {
+                await appendToGoogleSheet(text, aiResult);
+            } catch (sheetError) {
+                console.error('구글 시트 저장 실패:', sheetError);
+            }
+
             return res.status(200).json({ result: aiResult });
         } else {
             return res.status(500).json({ error: 'Gemini API 호출에 실패했습니다.' });
@@ -51,4 +60,63 @@ export default async function handler(req, res) {
     } catch (error) {
         return res.status(500).json({ error: '서버 내부 오류가 발생했습니다.' });
     }
+}
+
+// 📊 구글 시트 API를 직접 호출하여 한 줄 추가하는 함수
+async function appendToGoogleSheet(inputText, outputText) {
+    const sheetId = process.env.GOOGLE_SHEET_ID;
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+    const privateKey = process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined;
+
+    if (!sheetId || !clientEmail || !privateKey) {
+        console.error('구글 시트 환경변수가 설정되지 않았습니다.');
+        return;
+    }
+    
+    // 1. OAuth2 토큰 발급 요청 (Google Auth)
+    const authUrl = 'https://oauth2.googleapis.com/token';
+    const jwtHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+    
+    const now = Math.floor(Date.now() / 1000);
+    const jwtClaim = Buffer.from(JSON.stringify({
+        iss: clientEmail,
+        scope: 'https://www.googleapis.com/auth/spreadsheets',
+        aud: authUrl,
+        exp: now + 3600,
+        iat: now
+    })).toString('base64url');
+
+    const crypto = await import('crypto');
+    const sign = crypto.createSign('RSA-SHA256');
+    sign.update(`${jwtHeader}.${jwtClaim}`);
+    const signature = sign.sign(privateKey, 'base64url');
+    const jwt = `${jwtHeader}.${jwtClaim}.${signature}`;
+
+    const tokenResponse = await fetch(authUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`
+    });
+    
+    const tokenData = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+
+    if (!accessToken) {
+        throw new Error('구글 엑세스 토큰 발급 실패');
+    }
+
+    // 2. 구글 시트에 데이터 추가 (A1:C1 아래로 축적)
+    const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:C1:append?valueInputOption=USER_ENTERED`;
+    const kstDate = new Date(Date.now() + (9 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19); // 한국 시간 생성
+
+    await fetch(appendUrl, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            values: [[kstDate, inputText, outputText]]
+        })
+    });
 }
