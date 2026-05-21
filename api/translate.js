@@ -62,18 +62,24 @@ export default async function handler(req, res) {
     }
 }
 
-// 📊 구글 시트 API를 직접 호출하여 한 줄 추가하는 함수
 async function appendToGoogleSheet(inputText, outputText) {
-    const sheetId = process.env.GOOGLE_SHEET_ID;
-    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined;
+    const sheetId = process.env.GOOGLE_SHEET_ID ? process.env.GOOGLE_SHEET_ID.trim() : undefined;
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL ? process.env.GOOGLE_CLIENT_EMAIL.trim() : undefined;
+    
+    let privateKey = process.env.GOOGLE_PRIVATE_KEY;
+    if (privateKey) {
+        privateKey = privateKey.trim();
+        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+            privateKey = privateKey.substring(1, privateKey.length - 1);
+        }
+        privateKey = privateKey.replace(/\\n/g, '\n');
+    }
 
     if (!sheetId || !clientEmail || !privateKey) {
-        console.error('구글 시트 환경변수가 설정되지 않았습니다.');
+        console.error('구글 시트 환경변수 설정 미흡');
         return;
     }
     
-    // 1. OAuth2 토큰 발급 요청 (Google Auth)
     const authUrl = 'https://oauth2.googleapis.com/token';
     const jwtHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
     
@@ -105,9 +111,8 @@ async function appendToGoogleSheet(inputText, outputText) {
         throw new Error('구글 엑세스 토큰 발급 실패');
     }
 
-    // 2. 구글 시트에 데이터 추가 (A1:C1 아래로 축적)
     const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:C1:append?valueInputOption=USER_ENTERED`;
-    const kstDate = new Date(Date.now() + (9 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19); // 한국 시간 생성
+    const kstDate = new Date(Date.now() + (9 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19);
 
     await fetch(appendUrl, {
         method: 'POST',
