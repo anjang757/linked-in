@@ -13,10 +13,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: '서버에 Gemini API 키가 설정되지 않았습니다.' });
     }
 
-    // ⭕ [문제 해결 1] 속도 개선 및 안정성을 위해 최신 정식 규격(v1) 주소로 변경
     const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    // ⭕ [문제 해결 2] 구글 서버 전송 시 에러를 유발하는 줄바꿈과 불필요한 공백을 싹 제거하고 깔끔하게 정렬
     const systemInstruction =`
     당신은 일상 문구를 허세와 비즈니스 용어가 가득한 '링크드인식 화법'으로 바꾸는 전문가입니다. 입력된 문장을 커리어적 깨달음으로 확장하여, 소름 돋을 정도로 진지한 커리어적 깨달음으로 확장시켜 한국어 포스팅을 작성해 주세요.
 
@@ -43,29 +40,34 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        if (response.ok && data.candidates && data.candidates[0].content.parts[0].text) {
+        // ⭕ [에러 추적용 모니터 추가] 성공하지 않았다면 구글이 보낸 날것의 에러를 그대로 화면에 반환합니다.
+        if (!response.ok) {
+            return res.status(response.status).json({ 
+                error: `[구글 서버 에러] 상태코드: ${response.status} / 메시지: ${JSON.stringify(data)}` 
+            });
+        }
+
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
             let aiResult = data.candidates[0].content.parts[0].text;
             aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
 
-            // Vercel 환경에서 구글 시트 저장을 안전하게 배경으로 위임
             if (req.waitUntil) {
-                req.waitUntil(
-                    appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err))
-                );
+                req.waitUntil(appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err)));
             } else {
                 appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err));
             }
 
             return res.status(200).json({ result: aiResult });
         } else {
-            return res.status(500).json({ error: 'Gemini API 호출에 실패했습니다.' });
+            // 구조가 안 맞아서 실패한 경우 데이터 형태를 화면에 전송
+            return res.status(500).json({ error: `구글 데이터 구조 불일치: ${JSON.stringify(data)}` });
         }
     } catch (error) {
-        return res.status(500).json({ error: '서버 내부 오류가 발생했습니다.' });
+        return res.status(500).json({ error: `서버 내부 치명적 오류: ${error.message}` });
     }
 }
 
-// 구글 시트 저장 함수 (기존 유지)
+// 구글 시트 저장 함수 (기존과 동일)
 async function appendToGoogleSheet(inputText, outputText) {
     const sheetId = process.env.GOOGLE_SHEET_ID ? process.env.GOOGLE_SHEET_ID.trim() : undefined;
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL ? process.env.GOOGLE_CLIENT_EMAIL.trim() : undefined;
@@ -83,14 +85,9 @@ async function appendToGoogleSheet(inputText, outputText) {
     
     const authUrl = 'https://oauth2.googleapis.com/token';
     const jwtHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
-    
     const now = Math.floor(Date.now() / 1000);
     const jwtClaim = Buffer.from(JSON.stringify({
-        iss: clientEmail,
-        scope: 'https://www.googleapis.com/auth/spreadsheets',
-        aud: authUrl,
-        exp: now + 3600,
-        iat: now
+        iss: clientEmail, scope: 'https://www.googleapis.com/auth/spreadsheets', aud: authUrl, exp: now + 3600, iat: now
     })).toString('base64url');
 
     const crypto = await import('crypto');
@@ -107,7 +104,6 @@ async function appendToGoogleSheet(inputText, outputText) {
     
     const tokenData = await tokenResponse.json();
     const accessToken = tokenData.access_token;
-
     if (!accessToken) return;
 
     const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:C1:append?valueInputOption=USER_ENTERED`;
@@ -115,12 +111,7 @@ async function appendToGoogleSheet(inputText, outputText) {
 
     await fetch(appendUrl, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            values: [[kstDate, inputText, outputText]]
-        })
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[kstDate, inputText, outputText]] })
     });
 }
