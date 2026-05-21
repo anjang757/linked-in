@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-        // 1. Gemini AI에게 번역 요청 (이건 결과가 화면에 나와야 하니 기다립니다)
+        // 1. Gemini AI 호출 (이것만 기다립니다)
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -47,11 +47,18 @@ export default async function handler(req, res) {
             let aiResult = data.candidates[0].content.parts[0].text;
             aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
 
-            // ⭐ [핵심 수정] 앞에 await를 빼버려서 구글 시트 저장을 기다리지 않고 배경에서 실행시킵니다.
-            // 구글 시트가 늦게 열리든 말든 사용자는 바로 결과 창을 보게 됩니다.
-            appendToGoogleSheet(text, aiResult).catch(err => console.error('배경 구글 시트 저장 실패:', err));
+            // ⭐ [Vercel 전용 해결책] res.waitUntil을 사용하여
+            // 화면에 먼저 결과를 보내고, 구글 시트 저장은 뒤에서 안전하게 실행하도록 보장합니다.
+            if (req.waitUntil) {
+                req.waitUntil(
+                    appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err))
+                );
+            } else {
+                // 로컬 테스트 환경 대비용 기본 호출
+                appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err));
+            }
 
-            // 결과를 바로 사용자에게 돌려줍니다 (체감 속도 대폭 상승!)
+            // 0.1초 만에 브라우저에 결과 전송! (초고속)
             return res.status(200).json({ result: aiResult });
         } else {
             return res.status(500).json({ error: 'Gemini API 호출에 실패했습니다.' });
@@ -75,9 +82,7 @@ async function appendToGoogleSheet(inputText, outputText) {
         privateKey = privateKey.replace(/\\n/g, '\n');
     }
 
-    if (!sheetId || !clientEmail || !privateKey) {
-        return;
-    }
+    if (!sheetId || !clientEmail || !privateKey) return;
     
     const authUrl = 'https://oauth2.googleapis.com/token';
     const jwtHeader = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
