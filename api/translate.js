@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     `;
 
     try {
-        // 1. Gemini AI에게 번역 요청
+        // 1. Gemini AI에게 번역 요청 (이건 결과가 화면에 나와야 하니 기다립니다)
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -47,13 +47,11 @@ export default async function handler(req, res) {
             let aiResult = data.candidates[0].content.parts[0].text;
             aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
 
-            // 2. [구글 시트 저장] 번역 성공 시 구글 시트에 데이터 전송
-            try {
-                await appendToGoogleSheet(text, aiResult);
-            } catch (sheetError) {
-                console.error('구글 시트 저장 실패:', sheetError);
-            }
+            // ⭐ [핵심 수정] 앞에 await를 빼버려서 구글 시트 저장을 기다리지 않고 배경에서 실행시킵니다.
+            // 구글 시트가 늦게 열리든 말든 사용자는 바로 결과 창을 보게 됩니다.
+            appendToGoogleSheet(text, aiResult).catch(err => console.error('배경 구글 시트 저장 실패:', err));
 
+            // 결과를 바로 사용자에게 돌려줍니다 (체감 속도 대폭 상승!)
             return res.status(200).json({ result: aiResult });
         } else {
             return res.status(500).json({ error: 'Gemini API 호출에 실패했습니다.' });
@@ -63,6 +61,7 @@ export default async function handler(req, res) {
     }
 }
 
+// 구글 시트 저장 함수
 async function appendToGoogleSheet(inputText, outputText) {
     const sheetId = process.env.GOOGLE_SHEET_ID ? process.env.GOOGLE_SHEET_ID.trim() : undefined;
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL ? process.env.GOOGLE_CLIENT_EMAIL.trim() : undefined;
@@ -77,7 +76,6 @@ async function appendToGoogleSheet(inputText, outputText) {
     }
 
     if (!sheetId || !clientEmail || !privateKey) {
-        console.error('구글 시트 환경변수 설정 미흡');
         return;
     }
     
@@ -108,9 +106,7 @@ async function appendToGoogleSheet(inputText, outputText) {
     const tokenData = await tokenResponse.json();
     const accessToken = tokenData.access_token;
 
-    if (!accessToken) {
-        throw new Error('구글 엑세스 토큰 발급 실패');
-    }
+    if (!accessToken) return;
 
     const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:C1:append?valueInputOption=USER_ENTERED`;
     const kstDate = new Date(Date.now() + (9 * 60 * 60 * 1000)).toISOString().replace('T', ' ').substring(0, 19);
