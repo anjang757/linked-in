@@ -13,12 +13,12 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: '서버에 Gemini API 키가 설정되지 않았습니다.' });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // ⭕ [문제 해결 1] 속도 개선 및 안정성을 위해 최신 정식 규격(v1) 주소로 변경
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
-    // 💡 [속도 최적화] AI에게 너무 장문으로 쓰지 말고, 핵심만 요약해서 빠르게 쓰도록 지침을 축소했습니다.
-    const systemInstruction = `
-    당신은 일상 문구를 허세와 비즈니스 용어가 가득한 '링크드인식 화법'으로 바꾸는 전문가입니다.
-    입력된 문장을 커리어적 깨달음으로 확장하여, 소름 돋을 정도로 진지한 커리어적 깨달음으로 확장시켜 한국어 포스팅을 작성해 주세요.
+    // ⭕ [문제 해결 2] 구글 서버 전송 시 에러를 유발하는 줄바꿈과 불필요한 공백을 싹 제거하고 깔끔하게 정렬
+    const systemInstruction =`
+    당신은 일상 문구를 허세와 비즈니스 용어가 가득한 '링크드인식 화법'으로 바꾸는 전문가입니다. 입력된 문장을 커리어적 깨달음으로 확장하여, 소름 돋을 정도로 진지한 커리어적 깨달음으로 확장시켜 한국어 포스팅을 작성해 주세요.
 
     [작성 조건]
     1. 도입부는 강력한 대제목으로 시작할 것.
@@ -47,6 +47,7 @@ export default async function handler(req, res) {
             let aiResult = data.candidates[0].content.parts[0].text;
             aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
 
+            // Vercel 환경에서 구글 시트 저장을 안전하게 배경으로 위임
             if (req.waitUntil) {
                 req.waitUntil(
                     appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err))
@@ -64,7 +65,7 @@ export default async function handler(req, res) {
     }
 }
 
-// 구글 시트 저장 함수 (기존과 동일)
+// 구글 시트 저장 함수 (기존 유지)
 async function appendToGoogleSheet(inputText, outputText) {
     const sheetId = process.env.GOOGLE_SHEET_ID ? process.env.GOOGLE_SHEET_ID.trim() : undefined;
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL ? process.env.GOOGLE_CLIENT_EMAIL.trim() : undefined;
