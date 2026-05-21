@@ -29,10 +29,9 @@
         h1 {
             color: #0a66c2;
             margin-top: 0;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             font-size: 1.8rem;
         }
-        /* 레이아웃 구조 */
         .main-layout {
             display: flex;
             flex-direction: column;
@@ -65,7 +64,6 @@
             border-bottom: 2px solid #f3f2ef;
             padding-bottom: 8px;
         }
-        /* 현실 입력창 (축소형) */
         input[type="text"] {
             width: 100%;
             padding: 14px;
@@ -80,7 +78,6 @@
             border-color: #0a66c2;
             box-shadow: 0 0 0 1px #0a66c2;
         }
-        /* 입력창 바로 아래 버튼 그룹 */
         .button-group {
             display: flex;
             justify-content: flex-start;
@@ -97,7 +94,7 @@
             font-weight: bold;
             cursor: pointer;
             transition: background-color 0.2s;
-            flex: 1; /* 모바일 대응: 버튼이 균등하게 채워짐 */
+            flex: 1;
             max-width: 200px;
         }
         .btn:hover {
@@ -115,7 +112,6 @@
         .btn-copy:hover {
             background-color: #f3f8fd;
         }
-        /* 링크드인 결과창 */
         .output-box {
             min-height: 250px;
             max-height: 400px;
@@ -134,16 +130,16 @@
 <body>
 
     <div class="container">
-        <h1>💼 링크드인 인사이트 번역기</h1>
+        <h1>💼 링크드인 번역기</h1>
         
         <div class="main-layout">
             <div class="panel">
                 <div class="panel-header reality">현실</div>
-                <input type="text" id="inputText" placeholder="예: 소주말린다 (입력 후 Enter 누르세요)" onkeydown="if(event.key === 'Enter') translateToLinkedIn()">
+                <input type="text" id="inputText" placeholder="예: 소주말린다 (입력 후 Enter)" onkeydown="if(event.key === 'Enter') translateToLinkedIn()">
                 
                 <div class="button-group">
                     <button class="btn" id="submitBtn" onclick="translateToLinkedIn()">🚀 인사이트 도출</button>
-                    <button class="btn btn-copy" onclick="copyToClipboard()">📄 복사하기</button>
+                    <button class="btn btn-copy" onclick="copyToClipboard()">📄 인사이트 복사</button>
                 </div>
             </div>
             
@@ -155,18 +151,11 @@
     </div>
 
     <script>
-        // ⭐⭐⭐ [여기에 본인의 Gemini API 키를 넣으세요!] ⭐⭐⭐
-        const FIXED_API_KEY = "AIzaSyBFHTb-N_7tKGRB5jt86FiEm53TqHOzNH4";
-
         async function translateToLinkedIn() {
             const input = document.getElementById('inputText').value.trim();
             const outputBox = document.getElementById('outputText');
             const submitBtn = document.getElementById('submitBtn');
             
-            if (!FIXED_API_KEY || FIXED_API_KEY === "여기에_발급받은_API_키를_넣으세요") {
-                alert("코드 내 127번째 줄에 있는 FIXED_API_KEY 자리에 실제 API 키를 입력해 주세요!");
-                return;
-            }
             if (!input) {
                 alert("변환할 현실 문구를 입력해 주세요!");
                 return;
@@ -175,47 +164,22 @@
             outputBox.innerText = "Gemini AI가 고도의 비즈니스 인사이트를 도출하는 중입니다. 잠시만 기다려주세요... 🧠⏳";
             submitBtn.disabled = true;
 
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${FIXED_API_KEY}`;
-            
-            const systemInstruction = `
-            당신은 평범하고 사소한 일상 문구를 허세와 웅장함, 비즈니스 전문 용어가 가득한 '링크드인식 화법'으로 바꾸어 주는 바이럴 마케팅 전문가입니다.
-            입력된 문장의 핵심 의도나 맥락을 비틀어, 소름 돋을 정도로 진지한 커리어적 깨달음으로 확장시켜 장문의 한국어 포스팅을 작성해 주세요.
-
-            [작성 조건]
-            1. 도입부는 강력한 대제목으로 시작할 것 (형식 예: [Strategic Pivot] 이나 [Career Milestone] 같은 영문 대괄호 키워드 필수).
-            2. 본문에는 '린(Lean) 오퍼레이션', '애자일(Agile)', '얼라인먼트(Alignment)', '리소스 최적화(Resource Optimization)', '고객 경험(CX)', '피벗(Pivot)', '임팩트(Impact)', '거버넌스(Governance)' 같은 용어를 문맥에 맞게 적극 활용할 것.
-            3. 핵심적인 전문 비즈니스 개념 뒤에는 반드시 영문 괄호를 병기할 것 (예: 의사결정(Decision Making)).
-            4. 글 중간에 가독성을 위해 글머리 기호(ㅇ 또는 -)를 사용하여 역량이나 액션 플랜을 2~3가지로 구조화하여 보여줄 것.
-            5. 문체는 "~했습니다", "~를 통감합니다" 처럼 극도로 진지하고 성찰적인 어조를 유지할 것.
-            6. 마지막에는 오글거리는 교훈적 멘트(예: 커피챗은 언제나 환영입니다! ☕)와 함께 본문과 관련된 비즈니스 해시태그를 5개 이상 달아줄 것.
-            `;
-
-            const payload = {
-                contents: [{
-                    parts: [{
-                        text: `${systemInstruction}\n\n변환할 현실 문구: "${input}"`
-                    }]
-                }]
-            };
-
             try {
-                const response = await fetch(url, {
+                const response = await fetch('/api/translate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ text: input })
                 });
 
                 const data = await response.json();
 
-                if (response.ok && data.candidates && data.candidates[0].content.parts[0].text) {
-                    let aiResult = data.candidates[0].content.parts[0].text;
-                    aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
-                    outputBox.innerText = aiResult;
+                if (response.ok && data.result) {
+                    outputBox.innerText = data.result;
                 } else {
-                    outputBox.innerText = `에러 발생: API 호출에 실패했습니다.\n이유: ${data.error ? data.error.message : '알 수 없는 오류.'}`;
+                    outputBox.innerText = `에러 발생: ${data.error || '알 수 없는 오류가 발생했습니다.'}`;
                 }
             } catch (error) {
-                outputBox.innerText = "네트워크 오류가 발생했습니다. 인터넷 연결이나 API 키를 다시 확인해 주세요.";
+                outputBox.innerText = "서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.";
             } finally {
                 submitBtn.disabled = false;
             }
@@ -226,14 +190,14 @@
             const textToCopy = outputBox.innerText;
 
             if (textToCopy.startsWith("번역된 인사이트") || textToCopy.startsWith("Gemini AI가")) {
-                alert("복사할 인사이트가 없습니다. 먼저 변환을 완료해 주세요!");
+                alert("복사할 인사이트가 없습니다.");
                 return;
             }
 
             navigator.clipboard.writeText(textToCopy).then(() => {
                 alert("🚀 링크드인 포스팅이 클립보드에 복사되었습니다!");
             }).catch(err => {
-                alert("복사에 실패했습니다. 텍스트를 직접 드래그해 주세요.");
+                alert("복사에 실패했습니다.");
             });
         }
     </script>
