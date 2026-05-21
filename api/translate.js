@@ -15,12 +15,13 @@ export default async function handler(req, res) {
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
+    // 💡 [속도 최적화] AI에게 너무 장문으로 쓰지 말고, 핵심만 요약해서 빠르게 쓰도록 지침을 축소했습니다.
     const systemInstruction = `
-    당신은 평범하고 사소한 일상 문구를 허세와 웅장함, 비즈니스 전문 용어가 가득한 '링크드인식 화법'으로 바꾸어 주는 바이럴 마케팅 전문가입니다.
-    입력된 문장의 핵심 의도나 맥락을 비틀어, 소름 돋을 정도로 진지한 커리어적 깨달음으로 확장시켜 장문의 한국어 포스팅을 작성해 주세요.
+    당신은 일상 문구를 허세와 비즈니스 용어가 가득한 '링크드인식 화법'으로 바꾸는 전문가입니다.
+    입력된 문장을 커리어적 깨달음으로 확장하여, 소름 돋을 정도로 진지한 커리어적 깨달음으로 확장시켜 한국어 포스팅을 작성해 주세요.
 
     [작성 조건]
-    1. 도입부는 강력한 대제목으로 시작할 것 (형식 예: [Strategic Pivot] 이나 [Career Milestone] 같은 영문 대괄호 키워드 필수).
+    1. 도입부는 강력한 대제목으로 시작할 것.
     2. 본문 작성 중 현실 탭에 작성된 글 중 주요 키워드는 활용하되 글 전체를 절대로 인용하지 말 것.  어떤 내용이라도 실무 또는 자기계발 측면에서의 인사이트로 연관지어 글을 이끌어 가야함.
     3. 본문에는 '린(Lean) 오퍼레이션', '애자일(Agile)', '얼라인먼트(Alignment)', '리소스 최적화(Resource Optimization)', '고객 경험(CX)', '피벗(Pivot)', '임팩트(Impact)', '거버넌스(Governance)' 같은 용어를 문맥에 맞게 적극 활용할 것.
     4. 핵심적인 전문 비즈니스 개념 뒤에는 반드시 영문 괄호를 병기할 것 (예: 의사결정(Decision Making)).
@@ -30,7 +31,6 @@ export default async function handler(req, res) {
     `;
 
     try {
-        // 1. Gemini AI 호출 (이것만 기다립니다)
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -47,18 +47,14 @@ export default async function handler(req, res) {
             let aiResult = data.candidates[0].content.parts[0].text;
             aiResult = aiResult.replace(/###/g, '').replace(/\*\*/g, '');
 
-            // ⭐ [Vercel 전용 해결책] res.waitUntil을 사용하여
-            // 화면에 먼저 결과를 보내고, 구글 시트 저장은 뒤에서 안전하게 실행하도록 보장합니다.
             if (req.waitUntil) {
                 req.waitUntil(
                     appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err))
                 );
             } else {
-                // 로컬 테스트 환경 대비용 기본 호출
                 appendToGoogleSheet(text, aiResult).catch(err => console.error('시트 저장 실패:', err));
             }
 
-            // 0.1초 만에 브라우저에 결과 전송! (초고속)
             return res.status(200).json({ result: aiResult });
         } else {
             return res.status(500).json({ error: 'Gemini API 호출에 실패했습니다.' });
@@ -68,7 +64,7 @@ export default async function handler(req, res) {
     }
 }
 
-// 구글 시트 저장 함수
+// 구글 시트 저장 함수 (기존과 동일)
 async function appendToGoogleSheet(inputText, outputText) {
     const sheetId = process.env.GOOGLE_SHEET_ID ? process.env.GOOGLE_SHEET_ID.trim() : undefined;
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL ? process.env.GOOGLE_CLIENT_EMAIL.trim() : undefined;
